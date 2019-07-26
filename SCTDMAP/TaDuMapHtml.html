@@ -1,0 +1,167 @@
+<html>
+  <head>
+    <title>天地图四川</title>
+	<link rel="stylesheet" href="ol/ol.css" type="text/css"/>
+    <script src="ol/jquery-1.11.1.min.js" type="text/javascript"></script> 
+	<script src="ol/ol4.1.1_scgis.js" type="text/javascript"></script> 
+  </head>
+  <body>
+    <div id="map" class="map"></div>
+    <script>
+		var map;
+		var mapx;
+		var mapy;
+		var mapname;
+		var mapdata;
+		var styleCache = {};
+		var jsonList = {};
+		window.onload = function(){
+			//获取当前窗口的主机名
+			var hoUrl = decodeURI(location.host);
+			//获取参数
+			var url = decodeURI(location.search); //获取url中"?"符后的字串  
+			if (url.indexOf("?") != -1) {  
+			  var str = url.substr(1);  
+			  strs = str.split("&");
+			  var boolHmap = unescape(strs[0].split("=")[1]);  
+			  var regiid = unescape(strs[1].split("=")[1]);  
+			  mapname = unescape(strs[2].split("=")[1]);   
+			  $.ajax({ 
+					type: "post", 
+					url: "http://"+hoUrl+"/DE-HEApplyServer/servlet/TaDtMapSelect", 
+					dataType: "text", 
+					timeout : 50000,
+				    data : {
+						boolHmap:boolHmap,
+						regiid : regiid
+					},
+					success: function (datas) { 
+						var jsonobj = eval("("+datas+")");
+						if(jsonobj.length == 0){
+							alert("未查询到该项目天地图相关数据,请联系测绘公司！");
+						}else{
+							for (var j in jsonobj) {
+								if(j == 0){
+									mapx = unescape(jsonobj[j]["mapX"]);  
+									mapy = unescape(jsonobj[j]["mapY"]); 
+									jsonobj[j]["mapName"] = mapname;									
+									mapdata = unescape(JSON.stringify(jsonobj[j]["mapData"])); 
+								}
+							}
+							jsonList = jsonobj;
+							loadOverScgis();
+						}
+					}, 
+					error: function() {
+						alert("网络异常，请稍后重试");
+					} 
+				});
+			}
+		}
+		function loadOverScgis(){
+			var layer=new ol.scgisTileLayer(
+			"http://www.scgis.net.cn/iMap/iMapServer/DefaultRest/services/newtianditudlg/", //地图服务地址
+			{
+				token:"Rm_Wt1d_oYrKpyDvvyu68z3iH8Ub0-4xEDCF4yk2WB3I91AP-dZvWNv9MYEiVmwd"    //天地图四川服务访问令牌
+			});
+			/**测绘工具返回坐标值  框线图*/
+			var source = new ol.source.Vector();
+			//矢量图层
+			var localVector = new ol.layer.Vector({
+				source: source,
+				style: new ol.style.Style({
+					fill: new ol.style.Fill({
+						color: 'rgba(255, 255, 255, 0.1)'
+					}),
+					stroke: new ol.style.Stroke({
+						color: '#3300CC',
+						width: 2
+					}),
+					image: new ol.style.Circle({
+						radius: 10,
+						fill: new ol.style.Fill({
+							color: '#ffcc33'
+						})
+					})
+				})
+			});
+			//动态参数
+			var coordinates = new Array();
+			var objStr = eval(mapdata);  
+			for(var item in objStr){
+				var otr = objStr[item];
+				coordinates.push([otr.X,otr.Y]);
+			}
+			//声明一个新的数组
+			var coordinatesPolygon = new Array();
+			//循环遍历将经纬度转到"EPSG:4326"投影坐标系下
+			for (var i = 0; i < coordinates.length; i++) {
+				var pointTransform = ol.proj.fromLonLat([coordinates[i][0], coordinates[i][1]], "EPSG:4326");
+				coordinatesPolygon.push(pointTransform);
+			}
+			//多边形此处注意一定要是[坐标数组]
+			var plygon = new ol.geom.Polygon([coordinatesPolygon])
+			//多边形要素类
+			var feature = new ol.Feature({
+				geometry: plygon
+			});
+			source.addFeature(feature);
+			/**测绘工具返回坐标值  定位点*/
+			//var json= [{"lat":mapx,"lng":mapy,"name":mapname}]
+			var json = jsonList;
+			json = eval(json);
+			//矢量图层
+			var vectorsource = new ol.source.Vector({});
+			for (var i in json) {
+					var fea = json[i];
+					var geometrypt = new ol.geom.Point([fea.mapX, fea.mapY]);
+					feature = new ol.Feature({geometry: geometrypt, name: fea.mapName});
+					vectorsource.addFeature(feature);
+				}
+			var addressVector = new ol.layer.Vector({
+					source: vectorsource,
+					style: getStyle
+				});
+			var view=new ol.View({
+				//extent:[mapx, mapy, mapx, mapy],
+			   //center:[101.73,26.563],
+				center:[parseFloat(mapx),parseFloat(mapy)],
+				zoom: 18,
+				projection: "EPSG:4326"
+			});
+			//加载进瓦片图层
+			var map = new ol.scgcMap({
+				layers: [layer, localVector,addressVector],
+				view:view,
+				target: "map"
+			});
+			map.addLayer(layer);
+	}
+	//样式
+	function getStyle(feature, resolution) {
+		var text = feature.get('name');
+		if (!styleCache[text]) {
+			styleCache[text] = [
+				new ol.style.Style({
+					image: new ol.style.Icon({
+						src: 'img/map_zz.gif'
+					}),
+					text: new ol.style.Text({
+						font: '12px Calibri,sans-serif',
+						text: text,
+						fill: new ol.style.Fill({
+							color: '#DC143C'
+						}),
+						stroke: new ol.style.Stroke({
+							color: '#fff',
+							width: 3
+						})
+					})
+
+				})];
+		}
+		return styleCache[text];
+	}
+    </script>
+  </body>
+</html>
